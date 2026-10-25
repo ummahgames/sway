@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#171d23">
+  <meta name="description" content="Weaken. Hypnotize. Descend. An atmospheric isometric dungeon crawler with a horde of mythical creatures.">
+  <title>Sway — The Buried Kingdom</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23171d23'/%3E%3Cpath d='M12 32Q32 5 52 32Q32 59 12 32Z' fill='none' stroke='%23e3b76e' stroke-width='3'/%3E%3Ccircle cx='32' cy='32' r='8' fill='%23e3b76e'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+  <script src="engine.js" defer></script>
+  <script src="game.js" defer></script>
+</head>
+<body>
+  <main class="app">
+    <header class="masthead">
+      <a class="wordmark" href="./" aria-label="Sway home"><svg viewBox="0 0 44 34" aria-hidden="true"><path d="M2 17Q22-10 42 17Q22 44 2 17Z"/><circle cx="22" cy="17" r="7"/><path d="M22 2v-4M22 32v4"/></svg><span>SWAY</span><i>THE BURIED KINGDOM</i></a>
+      <div class="chapter-heading"><span id="region-label">THE FIRST DESCENT</span><strong id="floor-label">Buried Caravan Halls</strong></div>
+      <nav class="utilities" aria-label="Game settings">
+        <button id="sound-button" class="icon-button" title="Toggle sound" aria-label="Enable sound" aria-pressed="false">♫</button>
+        <button id="fullscreen-button" class="icon-button" title="Full screen" aria-label="Full screen">⛶</button>
+        <button id="pause-button" class="icon-button" title="Pause · Escape" aria-label="Pause game">Ⅱ</button>
+      </nav>
+    </header>
+
+    <section class="playfield" aria-label="Dungeon">
+      <canvas id="world" tabindex="0" aria-label="Isometric dungeon. Move with WASD or arrow keys. E to sway, Space to dodge, F to interact."></canvas>
+      <div class="vignette" aria-hidden="true"></div>
+      <div class="top-hud">
+        <div class="vitals"><div class="hud-caption"><span>THE WANDERER</span><span id="health-label">100 / 100</span></div><div class="health-track"><div id="health-fill"></div></div><div class="vital-foot"><span><b id="shards">0</b> sun shards</span><span id="auto-status">Auto-strike on</span></div></div>
+        <div class="floor-badge"><span class="tiny">DEPTH</span><strong id="depth">01</strong><span class="floor-rule"></span><span id="room-count">0 / 3 chambers</span></div>
+      </div>
+
+      <aside class="horde-panel" aria-label="Your horde">
+        <div class="panel-heading"><span>YOUR PROCESSION</span><strong id="horde-count">0</strong></div>
+        <div id="horde-list"><p class="empty-horde">You arrived alone.<br>You need not descend alone.</p></div>
+        <div class="horde-footer"><span class="status-dot"></span>No bonds. No limits.</div>
+      </aside>
+
+      <aside class="map-panel" aria-label="Dungeon map"><canvas id="minimap" width="224" height="102" aria-label="Map of three connected chambers"></canvas><span id="objective">Explore the three chambers</span></aside>
+
+      <div id="target-card" class="target-card" hidden><div><span class="tiny" id="target-kind">HOSTILE CREATURE</span><strong id="target-name">Dune Jackal</strong></div><span id="target-health"></span><div class="target-health-track"><i id="target-health-fill"></i></div><p id="target-hint">Weaken to begin Sway</p><div id="sway-track" class="sway-track" hidden><i id="sway-fill"></i></div></div>
+      <div id="announcement" class="announcement" aria-live="polite"></div>
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
+      <div id="placement-hint" class="placement-hint" hidden>Drag across the floor to place a formation <kbd>Esc</kbd> cancel</div>
+
+      <div id="joystick" class="joystick" aria-label="Movement joystick"><div id="joystick-knob"></div></div>
+      <div class="action-dock" aria-label="Combat controls">
+        <div class="primary-actions">
+          <button id="strike-button" class="action-button" title="Strike · J"><span class="action-glyph">⌁</span><span>Strike</span><kbd>J</kbd></button>
+          <button id="sway-button" class="action-button sway-action" title="Sway · E"><span class="action-glyph eye-glyph">◉</span><span>Sway</span><kbd>E</kbd></button>
+          <button id="dodge-button" class="action-button" title="Dodge · Space"><span class="action-glyph">➶</span><span>Dodge</span><kbd>␣</kbd><i id="dodge-cooldown"></i></button>
+        </div>
+        <span class="dock-divider"></span>
+        <div class="formation-actions">
+          <button data-command="rally" title="Rally · R"><span>◎</span><small>Rally</small><kbd>R</kbd></button>
+          <button data-command="line" title="Shield line · 1"><span>▥</span><small>Line</small><kbd>1</kbd></button>
+          <button data-command="anchor" title="Statue wall · 2"><span>♜</span><small>Anchor</small><kbd>2</kbd></button>
+          <button data-command="rush" title="Rush · 3"><span>⋙</span><small>Rush</small><kbd>3</kbd></button>
+          <button data-command="spread" title="Spread · 4"><span>⁙</span><small>Spread</small><kbd>4</kbd></button>
+        </div>
+      </div>
+      <button id="interact-button" class="interact-button" hidden>Descend <kbd>F</kbd></button>
+      <div class="bottom-caption"><span><i></i><span id="formation-status">Following your lead</span></span><span class="desktop-hint">WASD move · click a creature to target · E sway · Space dodge</span><button id="help-button">Field guide <span>?</span></button></div>
+    </section>
+
+    <div id="modal" class="modal-backdrop">
+      <section id="modal-content" class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title"></section>
+    </div>
+  </main>
+</body>
+</html>
