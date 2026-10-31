@@ -3,15 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#171d23">
-  <meta name="description" content="Weaken. Hypnotize. Descend. An atmospheric isometric dungeon crawler with a horde of mythical creatures.">
+  <meta name="theme-color" content="#191913">
+  <meta name="description" content="A 3D desert dungeon crawler. Weaken mythical beasts, sway them in battle, and descend with a growing army.">
   <title>Sway — The Buried Kingdom</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23171d23'/%3E%3Cpath d='M12 32Q32 5 52 32Q32 59 12 32Z' fill='none' stroke='%23e3b76e' stroke-width='3'/%3E%3Ccircle cx='32' cy='32' r='8' fill='%23e3b76e'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="style.css">
-  <script src="engine.js" defer></script>
-  <script src="game.js" defer></script>
+  <script type="module" src="game.js"></script>
 </head>
-<body>
+<body class="in-menu">
   <main class="app">
     <header class="masthead">
       <a class="wordmark" href="./" aria-label="Sway home"><svg viewBox="0 0 44 34" aria-hidden="true"><path d="M2 17Q22-10 42 17Q22 44 2 17Z"/><circle cx="22" cy="17" r="7"/><path d="M22 2v-4M22 32v4"/></svg><span>SWAY</span><i>THE BURIED KINGDOM</i></a>
@@ -24,17 +23,18 @@
     </header>
 
     <section class="playfield" aria-label="Dungeon">
-      <canvas id="world" tabindex="0" aria-label="Isometric dungeon. Move with WASD or arrow keys. E to sway, Space to dodge, F to interact."></canvas>
+      <canvas id="world" tabindex="0" aria-label="3D dungeon. WASD or click to move. E to sway, Space to dodge, F to interact. Scroll to zoom; Q and C turn the camera."></canvas>
+      <canvas id="world-labels" aria-hidden="true"></canvas>
       <div class="vignette" aria-hidden="true"></div>
       <div class="top-hud">
-        <div class="vitals"><div class="hud-caption"><span>THE WANDERER</span><span id="health-label">100 / 100</span></div><div class="health-track"><div id="health-fill"></div></div><div class="vital-foot"><span><b id="shards">0</b> sun shards</span><span id="auto-status">Auto-strike on</span></div></div>
+        <div class="vitals"><div class="health-orb"><div id="health-fill"></div><div class="orb-sheen"></div><span id="health-label">100 / 100</span></div><div class="vital-copy"><span class="hud-caption">THE WANDERER</span><span class="vital-title">Vitality</span><div class="vital-foot"><span><b id="shards">0</b> sun shards</span><span id="auto-status">Auto-strike on</span></div></div></div>
         <div class="floor-badge"><span class="tiny">DEPTH</span><strong id="depth">01</strong><span class="floor-rule"></span><span id="room-count">0 / 3 chambers</span></div>
       </div>
 
       <aside class="horde-panel" aria-label="Your horde">
         <div class="panel-heading"><span>YOUR PROCESSION</span><strong id="horde-count">0</strong></div>
         <div id="horde-list"><p class="empty-horde">You arrived alone.<br>You need not descend alone.</p></div>
-        <div class="horde-footer"><span class="status-dot"></span>No bonds. No limits.</div>
+        <div class="horde-footer"><span class="status-dot"></span>An army of your own making.</div>
       </aside>
 
       <aside class="map-panel" aria-label="Dungeon map"><canvas id="minimap" width="224" height="102" aria-label="Map of three connected chambers"></canvas><span id="objective">Explore the three chambers</span></aside>
@@ -45,11 +45,13 @@
       <div id="placement-hint" class="placement-hint" hidden>Drag across the floor to place a formation <kbd>Esc</kbd> cancel</div>
 
       <div id="joystick" class="joystick" aria-label="Movement joystick"><div id="joystick-knob"></div></div>
+      <div id="bond-orb" class="bond-orb"><div class="sway-orb"><div id="sway-orb-fill"></div><div class="orb-sheen"></div><span>◉</span></div><div><span class="hud-caption">THE CALL</span><strong>Sway</strong><small id="bond-status">Weaken. Connect. Sway.</small></div></div>
+      <nav class="camera-controls" aria-label="Camera controls"><button id="camera-left" aria-label="Turn camera left" title="Turn left · Q">↶</button><button id="camera-home" aria-label="Reset camera" title="Reset camera">⌖</button><button id="camera-right" aria-label="Turn camera right" title="Turn right · C">↷</button><span></span><button id="camera-out" aria-label="Zoom out">−</button><button id="camera-in" aria-label="Zoom in">+</button></nav>
       <div class="action-dock" aria-label="Combat controls">
         <div class="primary-actions">
-          <button id="strike-button" class="action-button" title="Strike · J"><span class="action-glyph">⌁</span><span>Strike</span><kbd>J</kbd></button>
-          <button id="sway-button" class="action-button sway-action" title="Sway · E"><span class="action-glyph eye-glyph">◉</span><span>Sway</span><kbd>E</kbd></button>
-          <button id="dodge-button" class="action-button" title="Dodge · Space"><span class="action-glyph">➶</span><span>Dodge</span><kbd>␣</kbd><i id="dodge-cooldown"></i></button>
+          <button id="strike-button" class="action-button" title="Strike · J"><span class="action-glyph"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 23 24 5l3-1-1 4-15 17M7 20l7 6M8 25l-3 4-2-2 3-4"/><path d="m11 20 12-12" opacity=".5"/></svg></span><span>Strike</span><kbd>J</kbd></button>
+          <button id="sway-button" class="action-button sway-action" title="Sway · E"><span class="action-glyph eye-glyph"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M2 16Q16-2 30 16Q16 34 2 16Z"/><circle cx="16" cy="16" r="5"/><path d="M16 2v-2M16 32v-2"/></svg></span><span>Sway</span><kbd>E</kbd></button>
+          <button id="dodge-button" class="action-button" title="Dodge · Space"><span class="action-glyph"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="m10 25 13-17M15 7l10-2-1 10M3 19l7-2M7 27l7-3M3 25l3-1"/></svg></span><span>Dodge</span><kbd>␣</kbd><i id="dodge-cooldown"></i></button>
         </div>
         <span class="dock-divider"></span>
         <div class="formation-actions">
@@ -61,12 +63,14 @@
         </div>
       </div>
       <button id="interact-button" class="interact-button" hidden>Descend <kbd>F</kbd></button>
-      <div class="bottom-caption"><span><i></i><span id="formation-status">Following your lead</span></span><span class="desktop-hint">WASD move · click a creature to target · E sway · Space dodge</span><button id="help-button">Field guide <span>?</span></button></div>
+      <div class="bottom-caption"><span><i></i><span id="formation-status">Following your lead</span></span><span class="desktop-hint">Click to move · E sway · Space dodge · Scroll to zoom</span><button id="help-button">Field guide <span>?</span></button></div>
     </section>
 
     <div id="modal" class="modal-backdrop">
       <section id="modal-content" class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title"></section>
     </div>
   </main>
+  <div id="loading-screen" class="loading-screen"><span>SWAY</span><p>Awakening the buried kingdom…</p></div>
+  <div id="render-error" class="render-error" hidden><h1>The kingdom needs WebGL 2.</h1><p>Open this game through a local web server in a current browser with hardware acceleration enabled.</p><code>python3 -m http.server 8097 --directory sway</code><p>Then visit localhost:8097.</p></div>
 </body>
 </html>
