@@ -66,7 +66,7 @@ import { DungeonRenderer } from './renderer3d.js';
     mode = 'game'; document.body.classList.remove('in-menu'); hordeSignature = null; view.focus.set(game.player.x, .1, game.player.y);
     closeModal(); initAudio();
     if (game.status === 'upgrade') showUpgrades();
-    else { announce(`DEPTH ${String(game.floor).padStart(2, '0')}`, game.region.name, game.region.subtitle); if (!resume) toast('Move toward a creature. Weaken it, then press E or tap Sway.'); }
+    else { announce(`DEPTH ${String(game.floor).padStart(2, '0')}`, game.region.name, game.region.subtitle); if (!resume) toast('Move toward a creature. Slash with J / Slash to weaken it, then press E or tap Sway.'); }
     save(); updateUI();
   }
   function pause(showGuide = false, reason = '') {
@@ -76,12 +76,12 @@ import { DungeonRenderer } from './renderer3d.js';
     if (showGuide) { guide(); return; }
     setModal(`<div class="modal-eyebrow">A MOMENT IN THE SAND</div><h2 id="modal-title">The kingdom can wait.</h2><p class="lead">${reason || 'Your expedition is saved on this browser. Your procession will be here when you return.'}</p><div class="stat-row"><div><b>${game.floor}</b><span>DEPTH</span></div><div><b>${game.allies.length}</b><span>FOLLOWERS</span></div><div><b>${game.player.shards}</b><span>SUN SHARDS</span></div></div><div class="pause-settings"><label><input type="checkbox" id="auto-toggle" ${game.autoAttack ? 'checked' : ''}> Auto-strike</label><label><input type="checkbox" id="effects-toggle" ${settings.reduced ? 'checked' : ''}> Reduced effects</label><label>Graphics <select id="detail-select"><option value="detailed" ${settings.detail === 'detailed' ? 'selected' : ''}>Detailed</option><option value="balanced" ${settings.detail === 'balanced' ? 'selected' : ''}>Balanced</option></select></label></div><div class="modal-actions"><button id="return-game" class="gold-button">Continue the descent <span>↗</span></button><button id="open-guide" class="secondary-button">Field guide</button></div><p class="modal-note">EXPEDITION SAVED LOCALLY · ESC TO RESUME</p>`);
     $('return-game').onclick = closeModal; $('open-guide').onclick = guide;
-    $('auto-toggle').onchange = e => { game.autoAttack = e.target.checked; save(); updateUI(); };
+    $('auto-toggle').disabled=true; $('auto-toggle').checked=false;
     $('detail-select').onchange = e => { settings.detail = e.target.value; view.setDetail(settings.detail); persistSettings(); };
     $('effects-toggle').onchange = e => { settings.reduced = e.target.checked; persistSettings(); };
   }
   function guide() {
-    setModal(`<div class="modal-eyebrow">NOTES FROM THE BURIED WORLD</div><h2 id="modal-title">The wanderer's field guide</h2><div class="guide-grid"><div><b>Weaken, then sway</b><p>Below 32% health, a creature bears a diamond. Select it, then tap Sway or press E. Stay close and keep the tether clear while it continues attacking.</p></div><div><b>Keep moving</b><p>WASD / arrows, click the floor, or use the touch stick. Scroll to zoom; Q / C turn the camera. Space dodges. Sway is a toggle: your thumb stays free to dodge. J strikes and cancels Sway.</p></div><div><b>Shape your procession</b><p>R rallies everyone. 1 forms a shield line; 2 creates a statue wall for seven seconds. Choose a command, then drag a segment across the floor. 3 rushes; 4 spreads out.</p></div><div><b>Descend together</b><p>Resolve every creature to open the gate. F interacts. Anchor a follower on the diamond seal in the second chamber to activate its healing sanctuary. Followers persist without a recruitment cap.</p></div><div><b>A fragile connection</b><p>Dodging pauses progress. Hits remove a little. Broken range or blocked sight slowly erodes it. Your followers stop targeting a creature during Sway, but shots already in flight can still kill it.</p></div><div><b>Leave, and return</b><p>Escape pauses and saves. The browser pauses when hidden. Defeat ends this expedition; your deepest descent remains recorded. Headphones and landscape are recommended.</p></div></div><button class="gold-button" id="guide-close">${mode === 'intro' ? 'Back to the ruins' : 'Return to the descent'} <span>↗</span></button>`);
+    setModal(`<div class="modal-eyebrow">NOTES FROM THE BURIED WORLD</div><h2 id="modal-title">The wanderer's field guide</h2><div class="guide-grid"><div><b>Weaken, then sway</b><p>Below 32% health, a creature bears a diamond. Select it, then tap Sway or press E. Stay close and keep the tether clear while it continues attacking.</p></div><div><b>Keep moving</b><p>WASD / arrows, click the floor, or use the touch stick. Scroll to zoom; Q / C turn the camera. Space dodges. Sway is a toggle: your thumb stays free to dodge. J performs a short melee slash and cancels Sway. H heals followers; M fuses a matching pair.</p></div><div><b>Shape your procession</b><p>R rallies everyone. 1 forms a shield line; 2 creates a statue wall for seven seconds. Choose a command, then drag a segment across the floor. 3 rushes; 4 spreads out.</p></div><div><b>Descend together</b><p>Resolve every creature to open the gate. F interacts. Anchor a follower on the diamond seal in the second chamber to activate its healing sanctuary. Followers persist without a recruitment cap.</p></div><div><b>A fragile connection</b><p>Dodging pauses progress. Hits remove a little. Broken range or blocked sight slowly erodes it. Your followers stop targeting a creature during Sway, but shots already in flight can still kill it.</p></div><div><b>Leave, and return</b><p>Escape pauses and saves. The browser pauses when hidden. Defeat ends this expedition; your deepest descent remains recorded. Headphones and landscape are recommended.</p></div></div><button class="gold-button" id="guide-close">${mode === 'intro' ? 'Back to the ruins' : 'Return to the descent'} <span>↗</span></button>`);
     $('guide-close').onclick = () => mode === 'intro' ? intro() : closeModal();
   }
   function showUpgrades() {
@@ -166,9 +166,11 @@ import { DungeonRenderer } from './renderer3d.js';
   function updateUI() {
     const p = game.player, allies = game.allies, target = game.selected;
     $('health-label').textContent = `${Math.ceil(p.hp)} / ${p.maxHp}`; $('health-fill').style.height = `${p.hp / p.maxHp * 100}%`;
-    $('shards').textContent = p.shards; $('auto-status').textContent = game.autoAttack ? 'Auto-strike on' : 'Manual strike';
+    $('heal-button').disabled=(game.healCd||0)>0; $('heal-button').textContent=(game.healCd||0)>0?`Mend · ${Math.ceil(game.healCd)}s`:'✧ Mend [H]';
+    $('merge-button').disabled=(game.mergeCd||0)>0;
+    $('shards').textContent = p.shards; $('auto-status').textContent = 'Manual slash · J';
     $('depth').textContent = String(game.floor).padStart(2, '0'); $('room-count').textContent = `${game.clearRooms.filter(Boolean).length} / 3 chambers`;
-    $('region-label').textContent = `STRATUM ${Math.floor((game.floor - 1) / 3) + 1} · DEPTH ${String(game.floor).padStart(2, '0')}`;
+    $('region-label').textContent = `STRATUM ${Math.floor((game.floor - 1) / 10) + 1} · DEPTH ${String(game.floor).padStart(2, '0')}`;
     $('floor-label').textContent = game.region.name; $('horde-count').textContent = allies.length;
     const grouped = Object.keys(TYPES).map(type => { const group = allies.filter(e => e.type === type); return { type, count: group.length, health: group.length ? group.reduce((n, e) => n + e.hp / e.maxHp, 0) / group.length : 0 }; }).filter(g => g.count);
     const signature = grouped.map(g => `${g.type}:${g.count}:${Math.round(g.health * 20)}`).join('|');
@@ -232,7 +234,8 @@ import { DungeonRenderer } from './renderer3d.js';
     }
     if (modalOpen || event.target instanceof HTMLInputElement) return;
     keys.add(key); if (event.repeat) return;
-    if (key === 'e') game.beginSway(); else if (key === ' ') doDodge(); else if (key === 'j') game.strike(true);
+    if(key==='h') game.healHorde(); else if(key==='m') game.mergeHorde();
+    else if (key === 'e') game.beginSway(); else if (key === ' ') doDodge(); else if (key === 'j') game.strike(true);
     else if (key === 'f') interact(); else if (key === 'r') command('rally'); else if (['1', '2', '3', '4'].includes(key)) command(['line', 'anchor', 'rush', 'spread'][Number(key) - 1]);
     else if (key === 'q') view.rotate(-.15); else if (key === 'c') view.rotate(.15);
     else if (key === '=' || key === '+') view.zoomBy(-1); else if (key === '-') view.zoomBy(1);
@@ -250,7 +253,7 @@ import { DungeonRenderer } from './renderer3d.js';
     if (picked) {
       if (game.sway && game.sway.targetId !== picked.id) game.sway = null;
       game.selectedId = picked.id;
-      moveTarget = !game.sway && distance(game.player, picked) > 3.3 ? { x: picked.x, y: picked.y, stopDistance: 3 } : null;
+      moveTarget = !game.sway && distance(game.player, picked) > 1.25 ? { x: picked.x, y: picked.y, stopDistance: 1.05 } : null;
       if (event.button === 2) { game.beginSway(); processEvents(); }
     }
     else if (game.isWalkable(aim.x, aim.y)) { moveTarget = aim; ripples.push({ ...aim, color: '#e3c18b', life: .5, max: .5, radius: .5 }); }
@@ -292,6 +295,8 @@ import { DungeonRenderer } from './renderer3d.js';
   $('sway-button').onclick = () => { if (!modalOpen) { game.beginSway(); processEvents(); updateUI(); } };
   $('strike-button').onclick = () => { if (!modalOpen) { game.strike(true); processEvents(); } };
   $('dodge-button').onclick = doDodge;
+  $('heal-button').onclick=()=>{if(!modalOpen){game.healHorde();processEvents();}};
+  $('merge-button').onclick=()=>{if(!modalOpen){game.mergeHorde();processEvents();}};
   document.querySelectorAll('[data-command]').forEach(button => button.onclick = () => command(button.dataset.command));
   $('pause-button').onclick = () => { if (mode === 'intro') return; if (modalOpen && game.status === 'playing') closeModal(); else if (!modalOpen) pause(); };
   $('help-button').onclick = () => pause(true);

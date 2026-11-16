@@ -41,6 +41,16 @@
       for (let y = room.y; y < room.y + room.h; y++) for (let x = room.x; x < room.x + room.w; x++) tiles[y * WIDTH + x] = 1;
     }
     for (const x0 of [12, 27]) for (let x = x0; x < x0 + 4; x++) for (let y = 7; y <= 9; y++) tiles[y * WIDTH + x] = 2;
+    // Additional connected side galleries open as the expedition deepens.
+    for (let i = 0; i < Math.min(6, Math.floor((floor - 1) / 2)); i++) {
+      const x0 = [3, 18, 33][i % 3], top = i < 3;
+      for (let x = x0; x < x0 + 6; x++) for (let y = top ? 0 : 15; y < (top ? 2 : 18); y++) tiles[y * WIDTH + x] = 1;
+    }
+    if (floor > 1) for (const x0 of [12, 27]) {
+      const wide = 1 + (floor % 3);
+      for (let x=x0;x<x0+4;x++) for(let y=7-wide;y<=9+wide;y++) tiles[y*WIDTH+x]=2;
+    }
+    if(floor>=3){tiles[3*WIDTH+12]=1;tiles[3*WIDTH+15]=1;}
     const pillars = [];
     for (const room of rooms) {
       for (const [dx, dy] of [[2, 2], [8, 2], [2, 10], [8, 10]]) {
@@ -70,16 +80,18 @@
       this.metrics = { recruited: 0, defeated: 0, highestHorde: 0 };
       this.entities = []; this.projectiles = []; this.zones = []; this.pickups = []; this.events = [];
       this.sway = null; this.selectedId = null; this.command = 'follow';
-      this.autoAttack = true; this.status = 'playing'; this.claimed = false;
+      this.autoAttack = false; this.status = 'playing'; this.claimed = false;
       this.generateFloor();
     }
-    get region() { return REGIONS[Math.floor((this.floor - 1) / 3) % REGIONS.length]; }
+    get region() { return REGIONS[Math.floor((this.floor - 1) / 10) % REGIONS.length]; }
     get allies() { return this.entities.filter(e => e.team === 'ally' && e.hp > 0); }
     get enemies() { return this.entities.filter(e => e.team === 'hostile' && e.hp > 0); }
     get selected() { return this.entities.find(e => e.id === this.selectedId && e.hp > 0) || null; }
     event(kind, data = {}) { this.events.push({ kind, ...data }); }
     generateFloor() {
       this.map = makeMap(this.floor, this.seed); this.flowCache = new Map();
+      this.healCd = 0; this.mergeCd = 0; this.nurseryTimer = 12; this.bridgeActive=false; this.laserTick=0;
+      this.breakables = this.map.rooms.flatMap((r, i) => [0,1,2].map((n) => ({ id: i*3+n, x:r.x+1.5+n*1.1, y:3.3, kind:n===2?'chest':'pot', hp:n===2?24:12, rare:((this.seed+i*17+this.floor*31+n)%11===0), broken:false })));
       this.clearRooms = [false, false, false]; this.claimed = false; this.plateActive = false;
       this.projectiles = []; this.zones = []; this.pickups = []; this.sway = null; this.selectedId = null;
       const random = randomSource(this.seed + this.floor * 217);
@@ -107,9 +119,10 @@
       if (!this.isWalkable(x, y)) { const point = this.nearestFloor(x, y); entity.x = point.x; entity.y = point.y; }
       this.entities.push(entity); return entity;
     }
+    get puzzleType(){return this.floor===1?'weight':['weight','bridge','laser'][this.floor%3];}
     isWalkable(x, y) {
       const gx = Math.floor(x), gy = Math.floor(y);
-      return gx >= 0 && gy >= 0 && gx < WIDTH && gy < HEIGHT && !!this.map.tiles[gy * WIDTH + gx] && !this.map.blocked.has(gy * WIDTH + gx);
+      return gx >= 0 && gy >= 0 && gx < WIDTH && gy < HEIGHT && (!!this.map.tiles[gy * WIDTH + gx] || (this.bridgeActive && gy===3 && (gx===13||gx===14))) && !this.map.blocked.has(gy * WIDTH + gx);
     }
     nearestFloor(x, y) {
       let best = { x: 4.5, y: 8.5 }, score = Infinity;
@@ -145,6 +158,11 @@
     canOccupy(entity, x, y) {
       const r = entity.radius * .72;
       for (const [dx, dy] of [[-r, 0], [r, 0], [0, -r], [0, r]]) if (!this.isWalkable(x + dx, y + dy)) return false;
+      if(entity===this.player) for(const prop of this.breakables||[]) if(!prop.broken && Math.hypot(prop.x-x,prop.y-y)<entity.radius+.3 && Math.hypot(prop.x-entity.x,prop.y-entity.y)>=Math.hypot(prop.x-x,prop.y-y)) return false;
+      if (entity === this.player) for (const unit of this.entities) {
+        if(unit.hp>0 && Math.hypot(unit.x-x,unit.y-y)<entity.radius+unit.radius*.85 && Math.hypot(unit.x-entity.x,unit.y-entity.y)>=Math.hypot(unit.x-x,unit.y-y)) return false;
+      }
+      if(entity!==this.player) for(const unit of [this.player,...this.entities]){if(unit===entity||unit.hp<=0)continue;const next=Math.hypot(unit.x-x,unit.y-y),current=distance(unit,entity);if(next<(entity.radius+unit.radius)*.85 && next<=current)return false;}
       if (entity.team === 'hostile') for (const ally of this._allies || this.allies) {
         if ((ally.mode === 'anchor' || ally.mode === 'line') && Math.hypot(ally.x - x, ally.y - y) < entity.radius + ally.radius * .9) return false;
       }
@@ -205,16 +223,40 @@
       this.event('dodge', { x: p.x, y: p.y }); return true;
     }
     strike(manual = false) {
-      if (this.status !== 'playing' || this.player.attackCd > 0 || (!manual && this.sway)) return false;
-      if (manual && this.sway) this.sway = null;
-      let target = this.selected;
-      if (!target || target.team !== 'hostile' || distance(this.player, target) > 4.1 || !target.awake) target = this.nearestEnemy(this.player, 4.1);
-      if (!target || !this.lineOfSight(this.player, target)) return false;
-      const p = this.player, d = distance(p, target) || 1;
-      p.facingX = (target.x - p.x) / d; p.facingY = (target.y - p.y) / d;
-      this.projectiles.push({ x: p.x, y: p.y, vx: p.facingX * 9, vy: p.facingY * 9, radius: .1, life: .65, damage: this.stats.damage, team: 'player', ownerId: 0, targetId: target.id });
-      p.attackCd = this.eligible(target) ? .95 : .62;
-      this.event('strike', { x: p.x, y: p.y }); return true;
+      if (this.status !== 'playing' || this.player.attackCd > 0) return false;
+      if (this.sway) this.sway = null;
+      const p=this.player, target=this.selected;
+      if(target && distance(p,target)<1.8) { const d=distance(p,target)||1; p.facingX=(target.x-p.x)/d; p.facingY=(target.y-p.y)/d; }
+      p.attackCd=.58; p.slashTime=.3;
+      const hit = t => { const dx=t.x-p.x,dy=t.y-p.y,d=Math.hypot(dx,dy); return d<1.65+(t.radius||0) && (dx*p.facingX+dy*p.facingY)/(d||1)>-.12 && this.lineOfSight(p,t); };
+      for(const e of this.enemies) if(hit(e)) this.hurt(e,this.stats.damage,'player');
+      for(const prop of this.breakables||[]) if(!prop.broken && hit(prop)) {
+        prop.hp-=this.stats.damage;
+        if(prop.hp<=0){ prop.broken=true; this.pickups.push({x:prop.x,y:prop.y,value:prop.kind==='chest'?3:1});
+          this.event('dissolve',{x:prop.x,y:prop.y,color:'#bd9661'});
+          if(prop.rare){const relic=(prop.id+this.floor)%3;if(relic===0){this.stats.damage+=2;this.event('notice',{text:'Rare relic: Sunwood Knot. +2 slash damage.'});}else if(relic===1){this.stats.tether+=.3;this.event('notice',{text:'Rare relic: Whisper Thread. Sway reaches farther.'});}else{this.player.maxHp+=8;this.player.hp=Math.min(this.player.maxHp,this.player.hp+8);this.event('notice',{text:'Rare relic: Amber Heart. +8 maximum vitality.'});}}
+        }
+      }
+      this.event('strike',{x:p.x,y:p.y}); return true;
+    }
+    healHorde() {
+      if(this.status!=='playing'||this.healCd>0) return false;
+      const injured=this.allies.filter(e=>distance(e,this.player)<5 && e.hp<e.maxHp);
+      if(!injured.length){this.event('notice',{text:'Bring injured followers within the healing circle.'});return false;}
+      for(const e of injured)e.hp=Math.min(e.maxHp,e.hp+e.maxHp*.35);
+      this.healCd=14; this.event('renew',{x:this.player.x,y:this.player.y});
+      this.event('notice',{text:`Mend restores ${injured.length} nearby followers. Recharge: 14 seconds.`}); return true;
+    }
+    mergeHorde() {
+      if(this.status!=='playing'||this.mergeCd>0)return false;
+      const group=this.allies.filter(e=>distance(e,this.player)<4 && e.mode!=='anchor');
+      for(const a of group){const b=group.find(e=>e.id!==a.id&&e.type===a.type&&(e.rank||1)===(a.rank||1)); if(!b)continue;
+        const ratio=(a.hp/a.maxHp+b.hp/b.maxHp)/2;
+        a.rank=(a.rank||1)+1;a.maxHp*=1.8;a.hp=a.maxHp*ratio;a.radius=Math.min(.8,a.radius*1.12);
+        this.entities=this.entities.filter(e=>e.id!==b.id);this.mergeCd=8;
+        this.event('recruit',{type:a.type,x:a.x,y:a.y});this.event('notice',{text:`Fusion: ${TYPES[a.type].name} reaches rank ${a.rank}. Health and attacks grow stronger.`}); return true;
+      }
+      this.event('notice',{text:'Fusion needs two nearby followers of the same species and rank.'});return false;
     }
     hurt(target, amount, sourceTeam = 'neutral') {
       if (target.hp <= 0) return;
@@ -234,7 +276,7 @@
         if (target === this.player) {
           this.status = 'dead'; this.sway = null; this.event('death');
         } else {
-          if (target.team === 'hostile') { this.metrics.defeated++; this.pickups.push({ x: target.x, y: target.y, value: target.elite ? 4 : 1 }); }
+          if (target.team === 'hostile' && !target.renewable) { this.metrics.defeated++; this.pickups.push({ x: target.x, y: target.y, value: target.elite ? 4 : 1 }); }
           if (this.sway && this.sway.targetId === target.id) { this.sway = null; this.event('notice', { text: 'The creature fell before the bond could form.' }); }
           this.event('dissolve', { x: target.x, y: target.y, color: TYPES[target.type].color });
         }
@@ -355,7 +397,7 @@
         if (distance(e, e.order) > .12) this.steer(e, e.order, 3.5, dt);
         if (e.mode === 'anchor') return;
       }
-      const captureId = this.sway ? this.sway.targetId : null;
+      const captureId = this.sway ? this.sway.targetId : this.selectedId;
       const enemy = this.nearestEnemy(e, e.mode === 'rush' ? 8 : 5.5, captureId);
       if (enemy && e.mode !== 'rally' && (distance(enemy, this.player) < 7.5 || e.mode === 'rush')) {
         const ranged = def.flying || def.attack === 'flame';
@@ -365,8 +407,8 @@
         } else if (e.attackCd <= 0 && this.lineOfSight(e, enemy)) {
           const d = distance(e, enemy) || 1;
           e.facingX = (enemy.x - e.x) / d; e.facingY = (enemy.y - e.y) / d;
-          if (ranged) this.projectiles.push({ x: e.x, y: e.y, vx: e.facingX * 6, vy: e.facingY * 6, radius: .1, life: .8, damage: 6.5, team: 'ally', ownerId: e.id, targetId: enemy.id });
-          else { this.hurt(enemy, def.attack === 'charge' ? 9 : 6.5, 'ally'); if (e.mode === 'rush' && def.attack === 'charge') enemy.stagger = .65; }
+          if (ranged) this.projectiles.push({ x: e.x, y: e.y, vx: e.facingX * 6, vy: e.facingY * 6, radius: .1, life: .8, damage: 6.5 * (1 + ((e.rank||1)-1)*.65), team: 'ally', ownerId: e.id, targetId: enemy.id });
+          else { this.hurt(enemy, (def.attack === 'charge' ? 9 : 6.5) * (1 + ((e.rank||1)-1)*.65), 'ally'); if (e.mode === 'rush' && def.attack === 'charge') enemy.stagger = .65; }
           e.attackCd = 1.2 + (e.id % 3) * .12;
         }
       } else if (e.mode === 'rush' && e.order) this.steer(e, e.order, def.speed * 1.8, dt);
@@ -421,6 +463,7 @@
       dt = clamp(dt, 0, .05); this.time += dt;
       this._allies = this.allies; this._enemies = this.enemies;
       const p = this.player;
+      this.healCd=Math.max(0,(this.healCd||0)-dt); this.mergeCd=Math.max(0,(this.mergeCd||0)-dt); p.slashTime=Math.max(0,(p.slashTime||0)-dt);
       p.attackCd = Math.max(0, p.attackCd - dt); p.dodgeCd = Math.max(0, p.dodgeCd - dt); p.invulnerable = Math.max(0, p.invulnerable - dt);
       if (p.dodgeTime > 0) { p.dodgeTime -= dt; this.move(p, p.dodgeX * 12 * dt, p.dodgeY * 12 * dt); }
       else {
@@ -430,7 +473,7 @@
       }
       for (const e of this.entities) { e.attackCd = Math.max(0, e.attackCd - dt); e.stagger = Math.max(0, e.stagger - dt); e.flash = Math.max(0, e.flash - dt); }
       this.updateSway(dt);
-      if (this.autoAttack && !this.sway && p.dodgeTime <= 0) this.strike();
+
       for (const e of this._enemies) if (e.team === 'hostile' && e.hp > 0) this.updateEnemy(e, dt);
       for (let i = 0; i < this._allies.length; i++) if (this._allies[i].hp > 0) this.updateAlly(this._allies[i], i, dt);
       this.separateAllies(dt); this.updateProjectiles(dt);
@@ -449,11 +492,26 @@
       this._allies = null; this._enemies = null;
       if (this.command !== 'follow' && !this.allies.some(e => e.mode === this.command)) this.command = 'follow';
       if (this.status !== 'playing') return;
-      for (let i = 0; i < 3; i++) if (!this.clearRooms[i] && !this.enemies.some(e => e.room === i)) {
+      for (let i = 0; i < 3; i++) if (!this.clearRooms[i] && !this.enemies.some(e => e.room === i && !e.renewable)) {
         this.clearRooms[i] = true; p.hp = Math.min(p.maxHp, p.hp + 8);
         this.event('roomClear', { room: i, all: this.clearRooms.every(Boolean) });
       }
-      this.plateActive = this.allies.some(e => e.mode === 'anchor' && distance(e, this.map.plate) < 1.1);
+      this.nurseryTimer-=dt;
+      if(this.nurseryTimer<=0){this.nurseryTimer=16;
+        if(!this.enemies.some(e=>e.renewable)){ const e=this.spawn('jackal',6.5,8.5);e.renewable=true;e.room=0;e.awake=false;e.attackCd=3;
+          this.event('notice',{text:'A dune jackal returns to the first chamber. The dungeon can never take your last chance to recruit.'}); }
+      }
+      const statues=this.allies.filter(e=>e.mode==='anchor' && e.order && distance(e,e.order)<.35);
+      const oldBridge=this.bridgeActive;
+      this.bridgeActive=this.floor>=3 && statues.filter(e=>distance(e,{x:12.5,y:3.5})<1.65).length>=2;
+      if(oldBridge!==this.bridgeActive){this.flowCache.clear();if(!this.isWalkable(p.x,p.y)){const safe=this.nearestFloor(p.x,p.y);p.x=safe.x;p.y=safe.y;}}
+      if(this.puzzleType==='laser'){
+        const a={x:18.5,y:10.5},b={x:24.5,y:10.5};
+        this.plateActive=statues.some(e=>pointSegmentDistance(e,a,b)<e.radius+.14);
+        this.laserTick=Math.max(0,(this.laserTick||0)-dt);
+        if(!this.plateActive && this.laserTick===0 && pointSegmentDistance(p,a,b)<p.radius+.12){this.hurt(p,9,'neutral');this.laserTick=1;}
+      }else if(this.puzzleType==='bridge') this.plateActive=this.bridgeActive;
+      else this.plateActive=statues.some(e=>distance(e,this.map.plate)<1.1) && (this.floor<4 || statues.some(e=>distance(e,{x:22.5,y:12.5})<.8));
     }
     interaction() {
       if (distance(this.player, this.map.exit) < 1.65 && this.clearRooms.every(Boolean)) return 'descend';
@@ -467,7 +525,7 @@
         this.claimed = true; this.player.hp = Math.min(this.player.maxHp, this.player.hp + 30); this.player.shards += 5;
         for (const e of this.allies) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * .3);
         this.event('notice', { text: 'The sanctuary restores your procession. +5 sun shards.' }); this.event('sanctuary');
-      } else if (action === 'lockedShrine') this.event('notice', { text: 'Anchor a follower on the diamond seal to awaken this sanctuary.' });
+      } else if (action === 'lockedShrine') this.event('notice', { text: this.puzzleType==='laser'?'Petrify a follower in the red beam to interrupt it.':this.puzzleType==='bridge'?'Anchor two followers by the broken gallery at the north bank.':this.floor>=4?'Hold both diamond seals with petrified followers.':'Anchor a follower on the diamond seal to awaken this sanctuary.' });
       return action;
     }
     descend(upgrade) {
@@ -489,14 +547,15 @@
       this.event('floor', { floor: this.floor }); return true;
     }
     serialize() {
-      return { version: VERSION, seed: this.seed, floor: this.floor, time: this.time, nextId: this.nextId, player: { ...this.player }, stats: { ...this.stats }, metrics: { ...this.metrics }, entities: this.entities.map(e => JSON.parse(JSON.stringify(e))), projectiles: this.projectiles.map(p => ({ ...p })), zones: this.zones.map(z => ({ ...z })), pickups: this.pickups.map(p => ({ ...p })), clearRooms: [...this.clearRooms], claimed: this.claimed, plateActive: this.plateActive, sway: this.sway ? { ...this.sway } : null, selectedId: this.selectedId, command: this.command, autoAttack: this.autoAttack, status: this.status };
+      return { version: VERSION, seed: this.seed, floor: this.floor, time: this.time, nextId: this.nextId, player: { ...this.player }, stats: { ...this.stats }, metrics: { ...this.metrics }, entities: this.entities.map(e => JSON.parse(JSON.stringify(e))), projectiles: this.projectiles.map(p => ({ ...p })), zones: this.zones.map(z => ({ ...z })), pickups: this.pickups.map(p => ({ ...p })), clearRooms: [...this.clearRooms], claimed: this.claimed, plateActive: this.plateActive, sway: this.sway ? { ...this.sway } : null, selectedId: this.selectedId, command: this.command, autoAttack: false, breakables:this.breakables, healCd:this.healCd, mergeCd:this.mergeCd, nurseryTimer:this.nurseryTimer, bridgeActive:this.bridgeActive, status: this.status };
     }
     static restore(data) {
       if (!data || data.version !== VERSION || !Number.isSafeInteger(data.floor) || data.floor < 1 || !Number.isFinite(data.seed) || !Array.isArray(data.entities) || !data.player || !data.stats || !data.metrics || !Array.isArray(data.clearRooms) || data.clearRooms.length !== 3 || !['playing', 'upgrade'].includes(data.status)) throw new Error('Invalid expedition save');
       const finite = (obj, keys) => keys.every(key => Number.isFinite(obj[key]));
       if (!finite(data.player, ['x', 'y', 'hp', 'maxHp', 'attackCd', 'dodgeCd', 'dodgeTime', 'invulnerable', 'shards']) || data.player.hp <= 0 || data.player.maxHp <= 0 || !finite(data.stats, ['damage', 'tether', 'swaySpeed', 'anchorDuration']) || data.entities.some(e => !TYPES[e.type] || !['ally', 'hostile'].includes(e.team) || !finite(e, ['id', 'x', 'y', 'hp', 'maxHp', 'attackCd', 'radius']) || e.maxHp <= 0)) throw new Error('Invalid expedition data');
       const game = new Game(data.seed);
-      for (const key of ['floor', 'time', 'nextId', 'player', 'stats', 'metrics', 'entities', 'projectiles', 'zones', 'pickups', 'clearRooms', 'claimed', 'plateActive', 'sway', 'selectedId', 'command', 'autoAttack', 'status']) if (data[key] !== undefined) game[key] = JSON.parse(JSON.stringify(data[key]));
+      for (const key of ['floor', 'time', 'nextId', 'player', 'stats', 'metrics', 'entities', 'projectiles', 'zones', 'pickups', 'clearRooms', 'claimed', 'plateActive', 'sway', 'selectedId', 'command', 'autoAttack', 'status', 'breakables', 'healCd', 'mergeCd', 'nurseryTimer','bridgeActive']) if (data[key] !== undefined) game[key] = JSON.parse(JSON.stringify(data[key]));
+      game.autoAttack=false;
       game.map = makeMap(game.floor, game.seed); game.flowCache = new Map(); game.events = [];
       if (!game.isWalkable(game.player.x, game.player.y)) throw new Error('Player is outside the dungeon');
       return game;

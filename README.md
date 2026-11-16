@@ -41,13 +41,13 @@ Resolve the floor's creatures by defeating or swaying them to open the eastern g
 | Camera turn | Q / C | Camera arrow buttons |
 | Reset camera | Compass / crosshair button | Compass / crosshair button |
 
-Basic strikes are automatic by default. Pause to switch to manual strikes, reduced effects, or the Balanced graphics preset. Balanced lowers rendering resolution and shadow resolution while preserving every follower and all combat rules. Touch devices default to Balanced. Sound is optional and synthesized locally. A full-screen control is available where the browser supports it.
+The wanderer starts with a wooden stick. Basic attacks are manual melee slashes (J / Slash); automatic player attacks are disabled, including in resumed saves. Selecting a creature asks followers to leave it for your capture attempt. H casts Mend on nearby injured followers; M fuses two matching nearby followers of the same rank. Pause for reduced effects or the Balanced graphics preset. Balanced lowers rendering resolution and shadow resolution while preserving every follower and all combat rules. Touch devices default to Balanced. Sound is optional and synthesized locally. A full-screen control is available where the browser supports it.
 
 ## Formations and the sanctuary
 
 Line and Anchor use nearby followers appropriate to the length you draw. The rest of the horde remains available. Statues last seven seconds initially, retain their health, reduce damage, block hostile ground movement, and intercept projectiles. Rally releases them early. Enemy warnings still need attention: lightning, flame cones, and other area attacks can bypass a defensive frontage.
 
-The second chamber contains a diamond pressure seal and a sanctuary. Anchor a follower on the seal, then approach the sanctuary and interact. Its one-time gift heals the player and horde and grants sun shards. This is an optional advantage; it never blocks the route to the next floor.
+The sanctuary rotates between marked pressure seals, a laser to interrupt with a statue, and a northern bridge supported by two anchored followers. The first floor teaches a single pressure seal. Later weight puzzles require two seals. Solve the challenge, then approach the sanctuary and interact. Its one-time gift heals the player and horde and grants sun shards. This is an optional advantage; it never blocks the route to the next floor.
 
 ## Included in the 3D edition
 
@@ -64,7 +64,7 @@ The second chamber contains a diamond pressure seal and a sanctuary. Anchor a fo
 - An optional sanctuary mechanism, loot, local autosave, pause, suspend/resume, and expedition defeat/restart.
 - Responsive controls, a minimap, horde summary, field guide, reduced effects, and generated sound effects.
 
-This is the 3D visual rebuild of the first playable edition of the [formal proposal](SWAY_GAME_PROPOSAL.md). Giant multi-stage boss recruitment, a complete mythology codex, additional regional creatures, and elaborate elemental mechanisms remain future content. Levels currently combine the same connected three-chamber layout with changing creatures, decoration, difficulty, and region palettes. There is no authored campaign or claim of infinitely unique room geometry.
+This is the 3D visual rebuild of the first playable edition of the [formal proposal](SWAY_GAME_PROPOSAL.md). Giant multi-stage boss recruitment, a complete mythology codex, additional regional creatures, and elaborate elemental mechanisms remain future content. Floors use three principal chambers, progressively opening side galleries and varying corridor widths within a bounded map. Regional art direction changes every ten floors. There is no authored campaign or claim of infinitely unique room geometry.
 
 The world uses 3D meshes with depth, perspective, lighting, shadows, and animations. A small 2D overlay draws readable health bars and damage numbers. Every follower remains a simulated creature. There is no gameplay cap, but very large hordes eventually encounter the memory and performance limits of the device. Physical phone performance has not yet been measured.
 
@@ -101,3 +101,7 @@ The checks cover active hostile recruitment, dodge continuity, tether interrupti
 ## Visual reference and dependencies
 
 The [original FATE on Steam](https://store.steampowered.com/app/246840/FATE/) and [WildTangent’s FATE screenshots](https://www.wildtangent.com/p/action/fate/) informed the overhead dungeon-crawler direction. Sway’s models, textures, UI, and effects are generated from its own source. Three.js 0.180.0 was obtained from the official npm package; its license is preserved in `vendor/THREE-LICENSE.txt`.
+
+## November expansion
+
+See [the expansion design](EXPANSION_DESIGN.md) for implemented rules and eight further creative puzzle directions. New mechanics include outward shimmery Sway waves, animated manual slashes, breakable pots/chests with coins and rare permanent relic upgrades, Mend, rank-based Fusion, player/creature collision, replenishing basic recruits in the first chamber, and optional statue laser/bridge puzzles. Run `node sway/test-expansion.cjs` for ten additional simulation scenarios. The new graphics in this pass have not been browser-verified because browser automation is unavailable in the current session.

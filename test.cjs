@@ -42,7 +42,7 @@ test('Capture orders suppress fresh allied attacks while existing shots remain d
 test('Explicit strikes cancel Sway, and a fallen follower never drops enemy loot', () => {
   const g = empty(), e = g.spawn('jackal', 6.3, 8.5); e.hp = 10; g.selectedId = e.id; g.beginSway();
   assert.equal(g.strike(true), true); assert.equal(g.sway, null);
-  const a = g.spawn('horn', 5, 8, 'ally'); g.hurt(a, 1000); assert.equal(g.pickups.length, 0);
+  const drops = g.pickups.length; const a = g.spawn('horn', 5, 8, 'ally'); g.hurt(a, 1000); assert.equal(g.pickups.length, drops);
 });
 test('A newly swayed creature is not attacked by its allies in the conversion frame', () => {
   const g = empty(), target = g.spawn('jackal', 5.5, 8.5), ally = g.spawn('jackal', 5.6, 8.5, 'ally');

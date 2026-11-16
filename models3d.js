@@ -121,10 +121,7 @@ export function createCharacter(type) {
     eyePair(head, eye, .168, .035, .062, .015);
     box(head, material('#a8b19c'), [-.16, -.12, -.04], [.11, .4, .04], [0, .2, -.13]);
     const staff = new THREE.Group(); staff.position.set(.06, -.24, .04); rig.rightArm.add(staff);
-    cylinder(staff, leather, [0, .08, 0], [.035, 1.3, .035]);
-    part(staff, GEO.ring, gold, [0, .77, 0], [.14, .19, .14]);
-    const crystal = part(staff, GEO.gem, material('#8bdfd0', { emissive: '#5ac6b6', emissiveIntensity: 2.5, roughness: .25 }), [0, .77, 0], [.075, .12, .075]); rig.glow.push(crystal);
-    cone(staff, gold, [0, .57, 0], [.07, .1, .07]);
+    cylinder(staff, leather, [0, .12, 0], [.045, .85, .045]);
     const book = box(body, leather, [-.26, .71, -.02], [.13, .22, .16], [0, 0, -.1]);
     box(book, gold, [0, 0, .51], [1.04, .12, .04]);
     const cloakGeo = new THREE.ConeGeometry(.36, .86, 9, 1, true, Math.PI * .5, Math.PI);
@@ -244,7 +241,7 @@ export function animateCharacter(root, entity, time, dt, channeling = false, red
   for (let i = 0; i < rig.wings.length; i++) rig.wings[i].rotation.z = anchored ? 0 : Math.sin(time * 5 + (entity.id || 0)) * (i ? -1 : 1) * .3;
   for (let i = 0; i < rig.tails.length; i++) if (!anchored) rig.tails[i].rotation.y = Math.sin(time * 2.7 + i) * .09;
   for (let i = 0; i < rig.glow.length; i++) if (!anchored) rig.glow[i].scale.y = rig.type === 'cinder' ? .35 + Math.sin(time * 8 + i) * .08 : rig.glow[i].scale.y;
-  if (rig.rightArm) rig.rightArm.rotation.x = channeling ? -1.1 : entity.attackCd > .4 ? -.4 : walking ? Math.sin(phase) * .22 : -.1;
+  if (rig.rightArm) rig.rightArm.rotation.x = channeling ? -1.1 : entity.slashTime > 0 ? -1.3 + (1-entity.slashTime/.3)*2.4 : walking ? Math.sin(phase) * .22 : -.1;
   if (rig.leftArm) rig.leftArm.rotation.x = channeling ? -.9 : walking ? -Math.sin(phase) * .25 : -.12;
   if (rig.head) rig.head.rotation.x = entity.windup ? -.13 : channeling ? -.06 : 0;
   if (root.userData.anchored !== anchored) {

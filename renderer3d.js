@@ -89,6 +89,8 @@ export class DungeonRenderer {
     this.hero = createCharacter('player'); this.actors.add(this.hero);
     this.heroShadow = meshPlane(this.actors, this.planeGeometry, this.shadowMaterial, 0, 0, 1.2);
     this.createEffectPools();
+    this.swayWaves=Array.from({length:5},()=>{const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(129*3),3));const wave=new THREE.Line(geo,new THREE.LineBasicMaterial({color:'#a5efd4',transparent:true,depthWrite:false,blending:THREE.AdditiveBlending}));wave.frustumCulled=false;this.effects.add(wave);return wave;});
+    this.slashArc=new THREE.Mesh(new THREE.RingGeometry(.65,1.55,32,1,0,Math.PI*.85),new THREE.MeshBasicMaterial({color:'#ffe2ab',transparent:true,opacity:.65,side:THREE.DoubleSide,depthWrite:false}));this.effects.add(this.slashArc);
     this.pickable = [];
     this.resize();
   }
@@ -187,9 +189,9 @@ export class DungeonRenderer {
       const rug = meshPlane(this.world, this.planeGeometry, this.ownMaterial(new THREE.MeshStandardMaterial({ map: this.rug, color: '#d5bda0', roughness: 1 })), room.x + 2.9, 8.4, 1, .045); rug.scale.set(1.45, 3.2, 1); rug.receiveShadow = true;
       for (const p of game.map.pillars.filter(p => p.x > room.x && p.x < room.x + 11)) this.buildPillar(p);
       for (const [x, z] of [[room.x + 1.1, 5.1], [room.x + 8.6, 3.1], [room.x + 7.1, 13.5]]) this.buildTorch(x, z);
-      this.buildUrn(room.x + 1.05, 3.1, .88, random);
-      this.buildUrn(room.x + 1.7, 3, .62, random);
-      this.buildUrn(room.x + 9.7, 13.5, .85, random);
+
+
+
       this.buildCrate(room.x + 9.8, 4, .68, .15);
       this.buildCrate(room.x + 9.8, 4.9, .52, -.12);
       this.buildBanner(room.x + 5.5, 2.15);
@@ -206,6 +208,24 @@ export class DungeonRenderer {
     dustGeo.setAttribute('position', new THREE.BufferAttribute(dust, 3));
     this.dust = new THREE.Points(dustGeo, this.ownMaterial(new THREE.PointsMaterial({ color: '#e3c996', size: .025, transparent: true, opacity: .4, depthWrite: false }))); this.dust.userData.ownedGeometry = true; this.world.add(this.dust);
     this.scene.fog.color.set(region.sky).lerp(new THREE.Color('#25271f'), .35); this.scene.background.copy(this.scene.fog.color);
+    this.propModels=new Map();
+    for(const prop of game.breakables||[]){
+      const group=new THREE.Group();group.position.set(prop.x,0,prop.y);group.userData.dynamic=true;this.world.add(group);
+      if(prop.kind==='pot'){
+        part(group,GEO.sphere,material('#af865b'),[0,.34,0],[.28,.34,.28]);
+        part(group,GEO.cylinder,this.gold,[0,.65,0],[.14,.09,.14]);
+      }else{
+        part(group,GEO.box,material('#6f4c31'),[0,.3,0],[.8,.5,.5]);
+        part(group,GEO.cylinder,material('#8b653a'),[0,.55,0],[.3,.78,.3],[0,0,Math.PI/2]);
+        for(const x of [-.29,.29])part(group,GEO.box,this.gold,[x,.34,.26],[.06,.5,.03]);
+        part(group,GEO.box,this.gold,[0,.4,.28],[.13,.16,.04]);
+      }
+      this.propModels.set(prop.id,group);
+    }
+    this.bridgeGroup=new THREE.Group();this.bridgeGroup.userData.dynamic=true;this.world.add(this.bridgeGroup);
+    for(let i=0;i<8;i++)part(this.bridgeGroup,GEO.box,material('#9c855b'),[13+i*.25,.015,3.5],[.23,.12,.95]);
+    this.laser=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(18.5,.65,10.5),new THREE.Vector3(24.5,.65,10.5)]),new THREE.LineBasicMaterial({color:'#ff624b',toneMapped:false}));this.world.add(this.laser);this.laser.userData.ownedGeometry=true;this.ownMaterial(this.laser.material);
+    if(game.puzzleType==='weight' && game.floor>=4) meshPlane(this.world,this.planeGeometry,this.seal.material,22.5,12.5,1.6,.055);
     this.batchArchitecture();
   }
   batchArchitecture() {
@@ -370,7 +390,17 @@ export class DungeonRenderer {
     for (let i = 0; i < this.bolts.count; i++) { const shot = game.projectiles[i]; matrix.position.set(shot.x, .72, shot.y); matrix.rotation.set(0, Math.atan2(shot.vx, shot.vy), 0); matrix.scale.set(.045, .045, .12); matrix.updateMatrix(); this.bolts.setMatrixAt(i, matrix.matrix); this.bolts.setColorAt(i, this.color.set(shot.team === 'hostile' ? '#ffc483' : shot.team === 'ally' ? '#a5e9cf' : '#ffe0a3')); }
     this.bolts.instanceMatrix.needsUpdate = true; if (this.bolts.instanceColor) this.bolts.instanceColor.needsUpdate = true;
     const target = game.sway && game.entities.find(e => e.id === game.sway.targetId);
-    this.tether.visible = !!target; for (const bead of this.tetherBeads) bead.visible = !!target;
+    this.tether.visible = false; for (const bead of this.tetherBeads) bead.visible = false;
+    this.swayWaves.forEach((wave,i)=>{
+      wave.visible=!!target;if(!target)return;
+      const progress=(t*.48+i/5)%1,r=progress*game.stats.tether,positions=wave.geometry.attributes.position;
+      for(let n=0;n<=128;n++){const a=n/128*TAU,rr=r+Math.sin(a*12-t*5+i)*.055;positions.setXYZ(n,game.player.x+Math.cos(a)*rr,.25+Math.sin(a*7+t*4)*.07,game.player.y+Math.sin(a)*rr);}
+      positions.needsUpdate=true;wave.material.opacity=(1-progress)*.8;
+    });
+    const slash=game.player.slashTime||0;this.slashArc.visible=slash>0;
+    this.slashArc.position.set(game.player.x,.65,game.player.y);
+    this.slashArc.rotation.set(-Math.PI/2,0,Math.atan2(-game.player.facingX,-game.player.facingY)-1.3+(1-slash/.3)*1.3);
+    this.slashArc.material.opacity=slash/.3*.65;
     if (target) {
       const a = new THREE.Vector3(game.player.x, 1.25, game.player.y), b = new THREE.Vector3(target.x, TYPES[target.type].flying ? 1.4 : .8, target.y);
       this.tether.material.color.set(game.sway.state === 'broken' ? '#e8b57b' : '#a4f4d8');
@@ -425,11 +455,14 @@ export class DungeonRenderer {
       model.root.visible = distance(e, game.player) < 18 || state.intro;
       if (e.team === 'hostile' && model.root.visible) this.pickable.push(model.root);
     }
+    this.bridgeGroup.visible=!!game.bridgeActive;this.laser.visible=game.puzzleType==='laser';this.laser.material.color.set(game.plateActive?'#8bd7af':'#ff624b');
     this.portal.material.uniforms.time.value = t; this.portal.material.uniforms.open.value = game.clearRooms.every(Boolean) ? 1 : 0;
     this.gateGlow.intensity = game.clearRooms.every(Boolean) ? 12 : 0;
     this.shrineGem.visible = !game.claimed; this.shrineGem.position.y = 1.25 + Math.sin(t * 2) * .09; this.shrineGem.rotation.y = t * .4;
     this.seal.material.emissive.set(game.plateActive ? '#67b9a0' : '#000000'); this.seal.material.emissiveIntensity = .5;
     this.dust.visible = !state.reduced; this.dust.rotation.y = Math.sin(t * .04) * .002;
+    for(const prop of game.breakables||[]){const model=this.propModels?.get(prop.id);if(model)model.visible=!prop.broken;}
+    for(const e of game.entities){const model=this.models.get(e.id);if(model)model.root.scale.setScalar(model.size*(1+((e.rank||1)-1)*.18));}
     this.updatePickups(game, t); this.updateEffects(game, state);
     this.renderer.render(this.scene, this.camera); this.drawLabels(game, state);
   }
@@ -447,6 +480,8 @@ export class DungeonRenderer {
       ctx.fillStyle = ready ? '#b7d2a0' : '#b0583f'; ctx.fillRect(p.x - width / 2, p.y, width * e.hp / e.maxHp, 3);
       if (ready) { ctx.font = '10px Georgia'; ctx.fillStyle = '#e4edbb'; ctx.shadowColor = '#000'; ctx.shadowBlur = 3; ctx.fillText('◇ SWAY', p.x, p.y - 8); ctx.shadowBlur = 0; }
     }
+    const hints=game.puzzleType==='laser'?[[21.5,10.5,'PETRIFY TO BLOCK']]:game.puzzleType==='bridge'?[[12.5,3.5,'ANCHOR TWO FOLLOWERS']]:[[20.5,12.5,'WEIGHT SEAL'],...(game.floor>=4?[[22.5,12.5,'SECOND SEAL']]:[])];
+    for(const [x,y,text] of hints){if(distance(game.player,{x,y})<9){const p=this.project(x,y,.15);if(p.visible){ctx.font='9px Georgia';ctx.fillStyle='#d7c79a';ctx.fillText(text,p.x,p.y);}}}
     for (const f of state.floating) { const p = this.project(f.x, f.y, 1.15 + (1 - f.life / .7) * .45); if (!p.visible) continue; ctx.globalAlpha = Math.min(1, f.life * 2); ctx.font = 'bold 13px Georgia'; ctx.fillStyle = f.color; ctx.shadowColor = '#111'; ctx.shadowBlur = 3; ctx.fillText(f.text, p.x, p.y); }
     ctx.globalAlpha = 1; ctx.shadowBlur = 0;
     for (const p of game.pickups) if (distance(p, game.player) < 6) { const screen = this.project(p.x, p.y, .48); if (!screen.visible) continue; ctx.font = '10px Georgia'; ctx.fillStyle = '#ead29b'; ctx.shadowColor = '#181a12'; ctx.shadowBlur = 2; ctx.fillText(`${p.value} sun shard${p.value > 1 ? 's' : ''}`, screen.x, screen.y - 10); }

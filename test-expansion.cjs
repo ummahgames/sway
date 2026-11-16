@@ -1,0 +1,13 @@
+const assert=require('node:assert/strict');const {Game,makeMap}=require('./engine.js');
+const fresh=()=>{const g=new Game(37);g.entities=[];g.breakables=[];return g;};
+const step=(g,secs)=>{for(let i=0;i<secs*60;i++)g.update(1/60);};
+let g=fresh(),e=g.spawn('jackal',5.3,8.5);e.hp=10;step(g,2);assert.equal(e.hp,10);assert.equal(g.autoAttack,false);g.player.facingX=1;g.player.facingY=0;g.strike(true);assert.equal(e.hp,0);assert(g.player.slashTime>0);assert.equal(g.projectiles.filter(p=>p.team==='player').length,0);
+g=fresh();e=g.spawn('jackal',7,8.5);g.strike(true);assert.equal(e.hp,e.maxHp);
+g=fresh();g.breakables=[{id:1,x:5.2,y:8.5,hp:12,kind:'pot',rare:true}];g.player.facingX=1;g.player.facingY=0;g.strike(true);assert(g.breakables[0].broken);assert.equal(g.pickups.length,1);g.player.attackCd=0;g.strike(true);assert.equal(g.pickups.length,1);
+g=fresh();let a=g.spawn('jackal',5.5,8.5,'ally');a.hp=5;assert(g.healHorde());assert(a.hp>5);assert(!g.healHorde());let b=g.spawn('jackal',6,8.5,'ally');b.hp=10;const ratio=(a.hp/a.maxHp+b.hp/b.maxHp)/2;assert(g.mergeHorde());assert.equal(g.allies.length,1);assert.equal(a.rank,2);assert(Math.abs(a.hp/a.maxHp-ratio)<1e-6);
+g=fresh();a=g.spawn('horn',5.1,8.5,'ally');const x=g.player.x;g.move(g.player,1,0);assert(g.player.x<x+.4);
+g=fresh();g.nurseryTimer=.01;step(g,.1);assert(g.enemies.some(e=>e.renewable));assert(g.clearRooms.every(Boolean));
+const count=f=>makeMap(f,37).tiles.filter(Boolean).length;assert(count(13)>count(1));g.floor=10;assert.equal(g.region.name,'Buried Caravan Halls');g.floor=11;assert.equal(g.region.name,'Ember Necropolis');
+g=fresh();g.floor=2;g.generateFloor();g.entities=[];a=g.spawn('horn',20,10.5,'ally');a.mode='anchor';a.order={x:a.x,y:a.y};a.orderTime=6;step(g,.1);assert(g.plateActive);
+g=fresh();g.floor=4;g.generateFloor();g.entities=[];for(let i=0;i<2;i++){a=g.spawn('jackal',12.5,3.2+i*.6,'ally');a.mode='anchor';a.order={x:a.x,y:a.y};a.orderTime=6;}step(g,.1);assert(g.bridgeActive);assert(g.isWalkable(13.5,3.5));assert(g.plateActive);const restore=Game.restore(JSON.parse(JSON.stringify(g.serialize())));assert(restore.bridgeActive);assert.deepEqual(restore.breakables,g.breakables);
+console.log('10 expansion scenarios passed: manual melee, range, loot, healing/fusion, collision, nursery, floor growth/themes, laser, bridge, persistence.');
